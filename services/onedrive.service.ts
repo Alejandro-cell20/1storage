@@ -1,7 +1,7 @@
 // services/onedrive.service.ts
 // OneDrive API service — fetches storage quota from Microsoft Graph API
 
-import { getSecureData } from '../utils/secureStorage';
+import { getValidOneDriveToken } from './onedrive-token';
 
 export interface OneDriveStorageQuota {
   /** Total storage limit in bytes (null = unlimited) */
@@ -18,7 +18,7 @@ const GRAPH_API_BASE = 'https://graph.microsoft.com/v1.0';
 
 class OneDriveService {
   private async _getToken(): Promise<string | null> {
-    return getSecureData('onedrive_token');
+    return getValidOneDriveToken();
   }
 
   /**

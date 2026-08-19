@@ -18,6 +18,7 @@ const SCOPES = [
   'profile',
   'email',
   'offline_access',
+  'User.Read',
   'Files.Read',
   'Files.Read.All',
   'Files.ReadWrite.All',
@@ -128,9 +129,11 @@ class OneDriveAuthService implements AuthService {
       const refreshToken = tokenData.refresh_token ?? '';
       const idToken = tokenData.id_token ?? '';
 
-      if (!accessToken) {
+      if (!accessToken || typeof accessToken !== 'string' || accessToken.trim().length === 0) {
         throw new Error('No access token received from Microsoft');
       }
+
+      console.log('[OneDriveAuth] Access token received');
 
       // Fetch user info from Microsoft Graph (fallback to id_token claims)
       const userInfo = await this.getUserInfo(accessToken, idToken);
@@ -244,19 +247,24 @@ class OneDriveAuthService implements AuthService {
   }
 
   private async getUserInfo(token: string, idToken?: string): Promise<any> {
-    // Try Microsoft Graph first
-    const response = await fetch('https://graph.microsoft.com/v1.0/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    // Try Microsoft Graph first, but don't fail if the app lacks Graph consent.
+    try {
+      const response = await fetch('https://graph.microsoft.com/v1.0/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-    if (response.ok) {
-      return response.json();
+      if (response.ok) {
+        return response.json();
+      }
+
+      const errorText = await response.text();
+      console.warn('[OneDriveAuth] Graph /me failed:', response.status, errorText);
+    } catch (e) {
+      console.warn('[OneDriveAuth] Graph /me network/request error:', e);
     }
 
-    const errorText = await response.text();
-    console.warn('[OneDriveAuth] Graph /me failed:', response.status, errorText);
-
-    // Fallback: decode id_token to get user profile info
+    // Fallback: decode id_token to get user profile info.
+    // The id_token is always available because we request openid/profile/email scopes.
     if (idToken) {
       try {
         const payload = this.parseJwt(idToken);
@@ -273,7 +281,9 @@ class OneDriveAuthService implements AuthService {
       }
     }
 
-    throw new Error('Failed to fetch user info from Microsoft Graph');
+    throw new Error(
+      'Could not retrieve your Microsoft profile. Please make sure the app has permission to access your account information, or try again later.'
+    );
   }
 
   private parseJwt(token: string): any {
